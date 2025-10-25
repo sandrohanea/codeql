@@ -26,10 +26,16 @@ jobs:
         working-directory: csharp
         run: dotnet tool restore
 
+      - name: Install updated Paket CLI
+        run: |
+          dotnet tool install paket --tool-path "$RUNNER_TEMP/paket-tool"
+          cp "$RUNNER_TEMP/paket-tool/paket" csharp/.paket/paket
+          chmod +x csharp/.paket/paket
+
       - name: Build local C# extractor
         id: build-extractor
         run: |
-          dotnet build csharp/CSharp.sln -c Release
+          dotnet build csharp/CSharp.sln -c Release /p:PaketDisableGlobalRestore=true
           dll_path="$(pwd)/csharp/extractor/Semmle.Extraction.CSharp/bin/Release/net9.0/Semmle.Extraction.CSharp.dll"
           pdb_path="$(pwd)/csharp/extractor/Semmle.Extraction.CSharp/bin/Release/net9.0/Semmle.Extraction.CSharp.pdb"
           echo "dll=$dll_path" >> "$GITHUB_OUTPUT"
