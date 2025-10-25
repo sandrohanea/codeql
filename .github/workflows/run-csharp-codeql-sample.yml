@@ -19,17 +19,23 @@ jobs:
         with:
           dotnet-version: |
             10.0.x
+            9.0.x
+          include-prerelease: true
 
-      - name: Install Bazelisk
-        run: brew install bazelisk
+      - name: Restore .NET tools
+        working-directory: csharp
+        run: dotnet tool restore
 
       - name: Build local C# extractor
-        env:
-          DESTDIR: ${{ github.workspace }}/local-codeql/csharp
+        id: build-extractor
         run: |
-          mkdir -p "$DESTDIR"
-          bazelisk run //csharp:install -- --destdir="$DESTDIR"
-          echo "CODEQL_EXTRACTOR_CSHARP_ROOT=$DESTDIR" >> "$GITHUB_ENV"
+          dotnet build csharp/CSharp.sln -c Release
+          dll_path="$(pwd)/csharp/extractor/Semmle.Extraction.CSharp/bin/Release/net9.0/Semmle.Extraction.CSharp.dll"
+          pdb_path="$(pwd)/csharp/extractor/Semmle.Extraction.CSharp/bin/Release/net9.0/Semmle.Extraction.CSharp.pdb"
+          echo "dll=$dll_path" >> "$GITHUB_OUTPUT"
+          if [ -f "$pdb_path" ]; then
+            echo "pdb=$pdb_path" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Initialize CodeQL
         id: init
@@ -37,6 +43,34 @@ jobs:
         with:
           languages: csharp
           build-mode: manual
+
+      - name: Override CodeQL C# extractor
+        run: |
+          cli_root="${{ steps.init.outputs.codeql-path }}"
+          dll="${{ steps.build-extractor.outputs.dll }}"
+          pdb="${{ steps.build-extractor.outputs.pdb }}"
+          if [ ! -d "$cli_root/csharp" ]; then
+            echo "Expected extractor root at $cli_root/csharp not found" >&2
+            exit 1
+          fi
+          if [ ! -f "$dll" ]; then
+            echo "Local Semmle.Extraction.CSharp.dll not found at $dll" >&2
+            exit 1
+          fi
+          replaced=0
+          while IFS= read -r -d '' target; do
+            echo "Replacing $target with local build"
+            cp "$dll" "$target"
+            if [ -n "$pdb" ] && [ -f "$pdb" ]; then
+              target_pdb="${target%.dll}.pdb"
+              cp "$pdb" "$target_pdb"
+            fi
+            replaced=1
+          done < <(find "$cli_root/csharp" -name Semmle.Extraction.CSharp.dll -print0)
+          if [ "$replaced" -eq 0 ]; then
+            echo "Did not find any Semmle.Extraction.CSharp.dll files under $cli_root/csharp" >&2
+            exit 1
+          fi
 
       - name: Build
         run: dotnet build ./csharp/demo/demo.slnx --no-restore -warnaserror
