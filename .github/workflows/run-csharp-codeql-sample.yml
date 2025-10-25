@@ -1,7 +1,7 @@
-name: Build CodeQL CLI (reusable)
+name: Run CSharp CodeQL Sample
 
 on:
-  workflow_call: {}
+  workflow_dispatch:
 
 jobs:
   build-codeql-cli:
