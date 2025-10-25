@@ -1,0 +1,37 @@
+name: Build CodeQL CLI (reusable)
+
+on:
+  workflow_call: {}
+
+jobs:
+  build-codeql-cli:
+    runs-on: macos-latest
+    outputs:
+      cli-path: ${{ steps.set-output.outputs.cli-path }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            10.0.x
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4.31.0
+        with:
+          languages: csharp
+          build-mode: manual
+
+      - name: Build
+        run: dotnet build ./csharp/demo/demo.slnx --no-restore -warnaserror
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4.31.0
+        with:
+          category: "/language:csharp"
+
+      - name: Export CLI path
+        id: set-output
+        run: echo "cli-path=$GITHUB_WORKSPACE/cli/codeql" >> $GITHUB_OUTPUT
