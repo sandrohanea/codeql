@@ -11,6 +11,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v5
+        with:
+          submodules: recursive
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -18,8 +20,20 @@ jobs:
           dotnet-version: |
             10.0.x
 
+      - name: Install Bazelisk
+        run: brew install bazelisk
+
+      - name: Build local C# extractor
+        env:
+          DESTDIR: ${{ github.workspace }}/local-codeql/csharp
+        run: |
+          mkdir -p "$DESTDIR"
+          bazelisk run //csharp:install -- --destdir="$DESTDIR"
+          echo "CODEQL_EXTRACTOR_CSHARP_ROOT=$DESTDIR" >> "$GITHUB_ENV"
+
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v4.31.0
+        id: init
+        uses: ./codeql-action/init
         with:
           languages: csharp
           build-mode: manual
@@ -28,10 +42,10 @@ jobs:
         run: dotnet build ./csharp/demo/demo.slnx --no-restore -warnaserror
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v4.31.0
+        uses: ./codeql-action/analyze
         with:
           category: "/language:csharp"
 
       - name: Export CLI path
         id: set-output
-        run: echo "cli-path=$GITHUB_WORKSPACE/cli/codeql" >> $GITHUB_OUTPUT
+        run: echo "cli-path=${{ steps.init.outputs.codeql-path }}" >> $GITHUB_OUTPUT
